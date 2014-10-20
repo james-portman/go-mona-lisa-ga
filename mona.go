@@ -28,17 +28,26 @@ import (
 type Point struct {
 	x int
 	y int
+        w int
+        h int
 }
 
 type Gene struct {
-	r uint32
-	g uint32
-	b uint32
-	a uint32
+	r uint8
+	g uint8
+	b uint8
+	a uint8
 	points []Point
 }
 
+type Pixel struct {
+        r uint8
+        g uint8
+        b uint8
+}
+
 type Individual struct {
+        pixels [][]Pixel
 	img image.Image
 	genes []Gene
 	fitness int
@@ -51,14 +60,13 @@ func (a ByFitness) Less(i, j int) bool { return a[i].fitness > a[j].fitness }
 
 
 func (gene *Gene) randomGene(maxX, maxY int) {
-    gene.r = rand.Uint32()
-    gene.g = rand.Uint32()
-    gene.b = rand.Uint32()
-    // gene.a = rand.Uint32()
-    gene.a = 65535
-	gene.a = rand.Uint32()
+    gene.r = uint8(rand.Intn(255))
+    gene.g = uint8(rand.Intn(255))
+    gene.b = uint8(rand.Intn(255))
+    // gene.a = uint8(rand.Intn(255))
+    gene.a = uint8(128)
 	gene.points = make([]Point,0)
-	gene.points = append(gene.points,Point{x:rand.Intn(maxX), y:rand.Intn(maxY)})
+	gene.points = append(gene.points,Point{x:(rand.Intn(maxX+20)-20), y:(rand.Intn(maxY+20)-20), w:(rand.Intn(10)), h:(rand.Intn(10))})
 }
 
 func (individual *Individual) randomIndividual(genes int, maxX, maxY int) {
@@ -71,36 +79,50 @@ func (individual *Individual) randomIndividual(genes int, maxX, maxY int) {
 }
 
 
-func (individual *Individual) calculateFitness(m image.Image) {
+func (individual *Individual) calculateFitness(m image.Image, original [][]Pixel) {
     bounds := m.Bounds()
 
     individual.generateImage(bounds.Max.X,bounds.Max.Y)
 
-    maxDiff := bounds.Max.X * bounds.Max.Y * (255 + 255 + 255)
+    // maxDiff := uint64(bounds.Max.X * bounds.Max.Y * (65535 + 65535 + 65535))
+	maxDiff := uint64(bounds.Max.X * bounds.Max.Y * (255 + 255 + 255))
     // fmt.Printf("max diff: %v\n",maxDiff)
-    totalDiff := 0
+    totalDiff := uint64(0)
 
     for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
 
-			oR, oG, oB, _ := m.At(x, y).RGBA()
-            nR, nG, nB, _ := individual.img.At(x, y).RGBA()
+			// oR, oG, oB, _ := m.At(x, y).RGBA()
+			oR := original[x][y].r
+			oG := original[x][y].g
+			oB := original[x][y].b
+            // nR, nG, nB, _ := individual.img.At(x, y).RGBA()
 
-            oR = oR/257
-            nR = nR/257
-            oG = oG/257
-            nG = nG/257
-            oB = oB/257
-            nB = nB/257
+			nR := individual.pixels[x][y].r
+			nG := individual.pixels[x][y].g
+			nB := individual.pixels[x][y].b
 
-            rDiff := int(oR) - int(nR)
-            if (rDiff < 0) { rDiff = rDiff * -1; }
-            gDiff := int(oG) - int(nG)
-            if (gDiff < 0) { gDiff = gDiff * -1; }
-            bDiff := int(oB) - int(nB)
-            if (bDiff < 0) { bDiff = bDiff * -1; }
+			rDiff := 0
+			gDiff := 0
+			bDiff := 0
 
-            totalDiff += (rDiff + gDiff + bDiff)
+            if (oR > (nR)) {
+                rDiff = int(oR - (nR))
+            } else {
+                rDiff = int((nR) - oR)
+            }
+            if (oG > (nG)) {
+                gDiff = int(oG - (nG))
+            } else {
+                gDiff = int((nG) - oG)
+            }
+            if (oB > (nB)) {
+                bDiff = int(oB - (nB))
+            } else {
+                bDiff = int((nB) - oB)
+            }
+
+            totalDiff += uint64(rDiff + gDiff + bDiff)
 
 			// A color's RGBA method returns values in the range [0, 65535].
 			// Shifting by 12 reduces this to the range [0, 15].
@@ -120,36 +142,71 @@ func (individual *Individual) deleteImage() {
 
 func (individual *Individual) generateImage(x,y int) {
 
-    m := image.NewRGBA(image.Rect(0, 0, x, y))
-    bg := color.RGBA{0, 0, 0, 255}
-    //bg := color.RGBA{255, 255, 255, 255}
+    // black image
+    individual.pixels = make([][]Pixel,x)
+	for i := 0; i < x; i++ {
+		individual.pixels[i] = make([]Pixel,y)
+	}
+    for i := 0; i < y; i++ {
+        for j := 0; j < x; j++ {
+            individual.pixels[j][i] = Pixel{r:0,g:0,b:0}
+        }
+    }
 
-    draw.Draw(m, m.Bounds(), &image.Uniform{bg}, image.ZP, draw.Src)
 
     for i := range(individual.genes) {
 
-        r := uint8(individual.genes[i].r/257)
-        g := uint8(individual.genes[i].g/257)
-        b := uint8(individual.genes[i].b/257)
-        a := uint8(individual.genes[i].a/257)
+        r := uint8(individual.genes[i].r)
+        g := uint8(individual.genes[i].g)
+        b := uint8(individual.genes[i].b)
+        // a := uint8(individual.genes[i].a)
 
-        c := color.RGBA{r,g,b,a}
+        // rectangle
+		x1 := individual.genes[i].points[0].x
+		x2 := individual.genes[i].points[0].x + individual.genes[i].points[0].w
 
-        // fmt.Printf("%v\n",len(individual.genes[i].points))
+		y1 := individual.genes[i].points[0].y
+		y2 := individual.genes[i].points[0].y + individual.genes[i].points[0].h
 
-        // presume 1 point for now
-        rect := image.Rectangle{image.Point{individual.genes[i].points[0].x,individual.genes[i].points[0].y},image.Point{individual.genes[i].points[0].x + 5,individual.genes[i].points[0].y + 5}}
+		if x1 < 0 { x1 = 0 }
+		if y1 < 0 { y1 = 0 }
+		if x2 >= x { x2 = x - 1 }
+		if y2 >= y { y2 = y - 1 }
 
-        // draw.Draw(m, rect, &image.Uniform{c}, image.ZP,draw.Src)
-		draw.Draw(m, rect, &image.Uniform{c}, image.ZP,draw.Over)
+		for k := y1; k <= y2; k++ {
+			for j := x1; j <= x2; j++ {
+				individual.pixels[j][k] = Pixel{r:r,g:g,b:b}
+				// need to make use of a (alpha) from above
+			}
+		}
 
-        // do drawmask instead?
 
 
-        //for j := range(individual.genes[i].points) {
-        //    fmt.Printf("%v,%v\n",individual.genes[i].points[j].x,individual.genes[i].points[j].y)
-        //}
+
     }
+
+
+}
+
+
+
+func (individual *Individual) generateActualImage(x,y int) {
+
+    m := image.NewRGBA(image.Rect(0, 0, x, y))
+    bg := color.RGBA{0, 0, 0, 255}
+    draw.Draw(m, m.Bounds(), &image.Uniform{bg}, image.ZP, draw.Src)
+
+	for oy := 0; oy < y; oy++ {
+		for ox := 0; ox < x; ox++ {
+			r := individual.pixels[ox][oy].r
+			g := individual.pixels[ox][oy].g
+			b := individual.pixels[ox][oy].b
+			a := uint8(255)
+			c := color.RGBA{r,g,b,a}
+			m.Set(ox,oy,c)
+		}
+
+	}
 
     individual.img = m
 
@@ -165,6 +222,14 @@ func breed(population []Individual, maxX, maxY int) {
     // swap new and old pop
     for i:= range newPopulation {
         population[i] = newPopulation[i]
+    }
+}
+
+func massiveMutate(population []Individual, maxX, maxY int) {
+    for i := len(population)/4; i<len(population)-1; i++ {
+        for j := 0; j < len(population[i].genes); j++ {
+            population[i].genes[j].randomGene(maxX,maxY)
+        }
     }
 }
 
@@ -190,8 +255,8 @@ func main() {
     runtime.GOMAXPROCS(4)
 
     populationSize := 1000
-    genes := 3000
-    generations := 1000
+    genes := 4000
+    generations := 10000
 
     rand.Seed(time.Now().Unix())
 
@@ -206,6 +271,23 @@ func main() {
             log.Fatal(err)
     }
     bounds := m.Bounds()
+
+
+	// get original in terms of pixels
+	original := make([][]Pixel,bounds.Max.X)
+	for i := 0; i < bounds.Max.X; i++ {
+		original[i] = make([]Pixel,bounds.Max.Y)
+	}
+
+    for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			oR, oG, oB, _ := m.At(x,y).RGBA()
+			r := uint8(oR/257)
+			g := uint8(oG/257)
+			b := uint8(oB/257)
+			original[x][y] = Pixel{r:r,g:g,b:b}
+		}
+	}
 
 
 
@@ -224,10 +306,13 @@ func main() {
 
     // start workers
     for w := 1; w <= 2; w++ {
-        go worker(w, jobs, results, population, m)
+        go worker(w, jobs, results, population, m, original)
     }
 
 
+    var bestScore = 0
+    var lastScore = 0
+    var worse = 0
 
     for j := 0; j < generations; j++ {
 
@@ -257,22 +342,51 @@ func main() {
 
         sort.Sort(ByFitness(population))
 
-        fmt.Printf("best fitness: %v\n",population[0].fitness)
-        population[0].generateImage(bounds.Max.X, bounds.Max.Y)
+	var totalFitness = 0
+	for i := range(population) {
+		totalFitness += population[i].fitness
+	}
 
-        toimg, _ := os.Create("best.png")
-        png.Encode(toimg, population[0].img)
-        toimg.Close()
+	var averageFitness = totalFitness / len(population)
+
+        fmt.Printf("best fitness: %v\n",population[0].fitness)
+	fmt.Printf("average fitness: %v\n",averageFitness)
+
+
+        if (population[0].fitness > bestScore) {
+            bestScore = population[0].fitness
+            fmt.Printf("New best score!\n")
+            population[0].generateActualImage(bounds.Max.X, bounds.Max.Y)
+            toimg, _ := os.Create("best.png")
+            png.Encode(toimg, population[0].img)
+            toimg.Close()
+        } else {
+            fmt.Printf("Score was no better than the current best\n")
+        }
+
+        if population[0].fitness < lastScore {
+            worse++
+        } else {
+            worse = 0
+        }
+
+        if worse >= 2 {
+            fmt.Printf("Score was worse than last time for 2nd time, mixing things up ****\n")
+            massiveMutate(population, bounds.Max.X, bounds.Max.Y)
+			worse = 0
+        }
+
+        lastScore = population[0].fitness
 
     }
 
 }
 
 
-func worker(id int, jobs <-chan int, results chan<- int, population []Individual, img image.Image) {
+func worker(id int, jobs <-chan int, results chan<- int, population []Individual, img image.Image, original [][]Pixel) {
     for {
         job := <- jobs
-        population[job].calculateFitness(img)
+        population[job].calculateFitness(img,original)
         results <- 1
     }
 }

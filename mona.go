@@ -54,10 +54,10 @@ func (gene *Gene) randomGene(maxX, maxY int) {
 	gene.r = uint8(rand.Intn(255))
 	gene.g = uint8(rand.Intn(255))
 	gene.b = uint8(rand.Intn(255))
-	gene.a = uint8(rand.Intn(255))
-	// gene.a = uint8(128)
+	gene.a = uint8(rand.Intn(127)+128)
+
 	gene.points = make([]Point, 0)
-	gene.points = append(gene.points, Point{x: (rand.Intn(maxX+20) - 20), y: (rand.Intn(maxY+20) - 20), w: (rand.Intn(10)), h: (rand.Intn(10))})
+	gene.points = append(gene.points, Point{x: (rand.Intn(maxX+20) - 20), y: (rand.Intn(maxY+20) - 20), w: (rand.Intn(15)), h: (rand.Intn(15))})
 }
 
 func (individual *Individual) randomIndividual(genes int, maxX, maxY int) {
@@ -176,9 +176,9 @@ func (individual *Individual) generateImagePixels(x, y int) {
 
 				// work out some dodgy version of alpha mix between current and new pixel
 				// return in int in case they overflowed 255
-				newr := int(currentPixel.r + uint8(float32(r) / 255 * float32(a)));
-				newg := int(currentPixel.g + uint8(float32(g) / 255 * float32(a)));
-				newb := int(currentPixel.b + uint8(float32(b) / 255 * float32(a)));
+				newr := (int(currentPixel.r) + int(r) ) / 2;
+				newg := (int(currentPixel.g) + int(g) ) / 2;
+				newb := (int(currentPixel.b) + int(b) ) / 2;
 
 				// make sure they wont overflow uint8 (0-255)
 				if newr > 255 { newr = 255; }
@@ -258,7 +258,7 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	populationSize := 1000
-	genes := 5000
+	genes := 2000
 	generations := 10000
 
 	rand.Seed(time.Now().Unix())

@@ -1,21 +1,13 @@
 package main
 
 import (
-	// "encoding/base64"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"log"
 	"os"
-	// "strings"
-
-	// Package image/jpeg is not used explicitly in the code below,
-	// but is imported for its initialization side-effect, which allows
-	// image.Decode to understand JPEG formatted images. Uncomment these
-	// two lines to also understand GIF and PNG images:
 	// _ "image/gif"
-	// _ "image/png"
 	_ "image/jpeg"
 	"image/png"
 	"math/rand"
@@ -32,17 +24,17 @@ type Point struct {
 }
 
 type Gene struct {
-	r      uint8
-	g      uint8
-	b      uint8
-	a      uint8
+	r      uint8 // red 0-255
+	g      uint8 // green 0-255
+	b      uint8 // blue 0-255
+	a      uint8 // alpha 0-255
 	points []Point
 }
 
 type Pixel struct {
-	r uint8
-	g uint8
-	b uint8
+	r uint8 // red 0-255
+	g uint8 // green 0-255
+	b uint8 // blue 0-255
 }
 
 type Individual struct {
@@ -62,8 +54,8 @@ func (gene *Gene) randomGene(maxX, maxY int) {
 	gene.r = uint8(rand.Intn(255))
 	gene.g = uint8(rand.Intn(255))
 	gene.b = uint8(rand.Intn(255))
-	// gene.a = uint8(rand.Intn(255))
-	gene.a = uint8(128)
+	gene.a = uint8(rand.Intn(255))
+	// gene.a = uint8(128)
 	gene.points = make([]Point, 0)
 	gene.points = append(gene.points, Point{x: (rand.Intn(maxX+20) - 20), y: (rand.Intn(maxY+20) - 20), w: (rand.Intn(10)), h: (rand.Intn(10))})
 }
@@ -80,21 +72,18 @@ func (individual *Individual) randomIndividual(genes int, maxX, maxY int) {
 func (individual *Individual) calculateFitness(m image.Image, original [][]Pixel) {
 	bounds := m.Bounds()
 
-	individual.generateImage(bounds.Max.X, bounds.Max.Y)
+	individual.generateImagePixels(bounds.Max.X, bounds.Max.Y)
 
-	// maxDiff := uint64(bounds.Max.X * bounds.Max.Y * (65535 + 65535 + 65535))
 	maxDiff := uint64(bounds.Max.X * bounds.Max.Y * (255 + 255 + 255))
-	// fmt.Printf("max diff: %v\n",maxDiff)
+
 	totalDiff := uint64(0)
 
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
 
-			// oR, oG, oB, _ := m.At(x, y).RGBA()
 			oR := original[x][y].r
 			oG := original[x][y].g
 			oB := original[x][y].b
-			// nR, nG, nB, _ := individual.img.At(x, y).RGBA()
 
 			nR := individual.pixels[x][y].r
 			nG := individual.pixels[x][y].g
@@ -138,13 +127,14 @@ func (individual *Individual) deleteImage() {
 	individual.img = nil
 }
 
-func (individual *Individual) generateImage(x, y int) {
+func (individual *Individual) generateImagePixels(x, y int) {
 
-	// black image
+	// make pixels 2d array
 	individual.pixels = make([][]Pixel, x)
 	for i := 0; i < x; i++ {
 		individual.pixels[i] = make([]Pixel, y)
 	}
+	// fill with black
 	for i := 0; i < y; i++ {
 		for j := 0; j < x; j++ {
 			individual.pixels[j][i] = Pixel{r: 0, g: 0, b: 0}
@@ -156,7 +146,7 @@ func (individual *Individual) generateImage(x, y int) {
 		r := uint8(individual.genes[i].r)
 		g := uint8(individual.genes[i].g)
 		b := uint8(individual.genes[i].b)
-		// a := uint8(individual.genes[i].a)
+		a := uint8(individual.genes[i].a)
 
 		// rectangle
 		x1 := individual.genes[i].points[0].x
@@ -165,6 +155,8 @@ func (individual *Individual) generateImage(x, y int) {
 		y1 := individual.genes[i].points[0].y
 		y2 := individual.genes[i].points[0].y + individual.genes[i].points[0].h
 
+
+		// cut off any of the shape outside of the image dimensions
 		if x1 < 0 {
 			x1 = 0
 		}
@@ -180,8 +172,21 @@ func (individual *Individual) generateImage(x, y int) {
 
 		for k := y1; k <= y2; k++ {
 			for j := x1; j <= x2; j++ {
-				individual.pixels[j][k] = Pixel{r: r, g: g, b: b}
-				// need to make use of a (alpha) from above
+				var currentPixel = individual.pixels[j][k];
+
+				// work out some dodgy version of alpha mix between current and new pixel
+				// return in int in case they overflowed 255
+				newr := int(currentPixel.r + uint8(float32(r) / 255 * float32(a)));
+				newg := int(currentPixel.g + uint8(float32(g) / 255 * float32(a)));
+				newb := int(currentPixel.b + uint8(float32(b) / 255 * float32(a)));
+
+				// make sure they wont overflow uint8 (0-255)
+				if newr > 255 { newr = 255; }
+				if newg > 255 { newg = 255; }
+				if newb > 255 { newb = 255; }
+
+				individual.pixels[j][k] = Pixel{r: uint8(newr), g: uint8(newg), b: uint8(newb)}
+				// need to make use of a (alpha) from above - if used
 			}
 		}
 
@@ -249,10 +254,11 @@ func makeChild(mum, dad Individual, maxX, maxY int) Individual {
 }
 
 func main() {
-	runtime.GOMAXPROCS(4)
+
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	populationSize := 1000
-	genes := 4000
+	genes := 5000
 	generations := 10000
 
 	rand.Seed(time.Now().Unix())
@@ -302,15 +308,12 @@ func main() {
 	}
 
 	var bestScore = 0
-	var lastScore = 0
-	var worse = 0
 
 	for j := 0; j < generations; j++ {
 
 		fmt.Printf("generation %v\n", j)
 
 		if j > 0 {
-			// breed
 			breed(population, bounds.Max.X, bounds.Max.Y)
 		}
 
@@ -318,7 +321,6 @@ func main() {
 
 		for i := range population {
 			jobs <- i
-			// population[i].calculateFitness(m)
 		}
 
 		// wait for workers, should probably use wg.wait?
@@ -349,19 +351,6 @@ func main() {
 			fmt.Printf("Score was no better than the current best\n")
 		}
 
-		if population[0].fitness < lastScore {
-			worse++
-		} else {
-			worse = 0
-		}
-
-		if worse >= 2 {
-			fmt.Printf("Score was worse than last time for 2nd time, mixing things up ****\n")
-			massiveMutate(population, bounds.Max.X, bounds.Max.Y)
-			worse = 0
-		}
-
-		lastScore = population[0].fitness
 
 	}
 

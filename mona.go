@@ -146,7 +146,7 @@ func (individual *Individual) generateImagePixels(x, y int) {
 		r := uint8(individual.genes[i].r)
 		g := uint8(individual.genes[i].g)
 		b := uint8(individual.genes[i].b)
-		a := uint8(individual.genes[i].a)
+		// a := uint8(individual.genes[i].a)
 
 		// rectangle
 		x1 := individual.genes[i].points[0].x
